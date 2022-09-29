@@ -6,6 +6,8 @@ import burp.IExtensionStateListener;
 import burp.ITab;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.IntelliJTheme;
+import com.formdev.flatlaf.extras.FlatInspector;
+import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
 import com.formdev.flatlaf.intellijthemes.FlatAllIJThemes;
 
 import javax.swing.*;
@@ -68,13 +70,8 @@ public class BurpCustomizer implements ITab, IBurpExtender, IExtensionStateListe
             compatible = false;
         }
 
-        try {
-            Class inspector = Class.forName("com.formdev.flatlaf.extras.FlatInspector");
-            Method install = inspector.getMethod("install", String.class);
-            install.invoke(null,"ctrl shift alt X");
-        }catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
-            //Could not install inspector. Probably not in testCompile.
-        }
+        FlatInspector.install("ctrl shift alt U");
+        FlatUIDefaultsInspector.install("ctrl shift alt Y");
 
         SwingUtilities.invokeLater(() -> {
             if(themeSource == ThemeSource.BUILTIN && selectedBuiltIn != null){
@@ -149,6 +146,9 @@ public class BurpCustomizer implements ITab, IBurpExtender, IExtensionStateListe
             callbacks.printError("Could not load theme.");
             callbacks.printError(sw.toString());
             JOptionPane.showMessageDialog(getUiComponent(), "Could not load the specified theme.\n" + ex.getMessage(), "Burp Customizer", JOptionPane.ERROR_MESSAGE);
+            try{ //Fall back to built in theme if we encounter an issue.
+                UIManager.setLookAndFeel(originalBurpTheme);
+            }catch (Exception ignored){}
         }
     }
 
@@ -174,6 +174,9 @@ public class BurpCustomizer implements ITab, IBurpExtender, IExtensionStateListe
             callbacks.printError("Could not load theme.");
             callbacks.printError(sw.toString());
             JOptionPane.showMessageDialog(getUiComponent(), "Could not load the specified theme:\n" + ex.getMessage(), "Burp Customizer", JOptionPane.ERROR_MESSAGE);
+            try{ //Fall back to built in theme if we encounter an issue.
+                UIManager.setLookAndFeel(originalBurpTheme);
+            }catch (Exception ignored){}
         }
     }
 
