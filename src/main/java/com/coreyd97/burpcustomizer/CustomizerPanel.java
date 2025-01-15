@@ -3,7 +3,7 @@ package com.coreyd97.burpcustomizer;
 import com.coreyd97.BurpExtenderUtilities.Alignment;
 import com.coreyd97.BurpExtenderUtilities.PanelBuilder;
 import com.formdev.flatlaf.FlatLaf;
-import com.formdev.flatlaf.IntelliJTheme;
+import lombok.SneakyThrows;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -12,6 +12,8 @@ import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.ItemEvent;
 import java.awt.image.BufferedImage;
 import java.io.*;
@@ -21,10 +23,14 @@ import java.net.URL;
 
 public class CustomizerPanel extends JPanel {
 
+    private final BurpCustomizer customizer;
     JButton viewOnGithubButton;
     private File selectedThemeFile;
+    public final PreviewPanel previewPanel;
+    private final JComboBox<UIManager.LookAndFeelInfo> lookAndFeelSelector;
 
     public CustomizerPanel(BurpCustomizer customizer){
+        this.customizer = customizer;
         this.setLayout(new BorderLayout());
 
         JLabel headerLabel = new JLabel("Burp Customizer");
@@ -126,13 +132,13 @@ public class CustomizerPanel extends JPanel {
 
         aboutContent.setBorder(new EmptyBorder(0, 0, 20, 0));
 
-        PreviewPanel previewPanel = new PreviewPanel();
+        previewPanel = new PreviewPanel();
         previewPanel.setBorder(new EmptyBorder(10, 0, 10, 0));
 
         JLabel themeLabel = new JLabel("Select Theme");
         themeLabel.setFont(themeLabel.getFont().deriveFont(Font.BOLD));
 
-        JComboBox<UIManager.LookAndFeelInfo> lookAndFeelSelector = new JComboBox<>();
+        lookAndFeelSelector = new JComboBox<>();
         lookAndFeelSelector.setRenderer(new LookAndFeelRenderer());
         for (UIManager.LookAndFeelInfo theme : customizer.getThemes()) {
             lookAndFeelSelector.addItem(theme);
@@ -147,9 +153,10 @@ public class CustomizerPanel extends JPanel {
                 selectedThemeFile = null;
                 selectFileButton.setText("Select Theme File...");
                 try{
-                    LookAndFeel theme = customizer.createThemeFromDefaults((UIManager.LookAndFeelInfo) e.getItem());
-                    previewPanel.setTheme(theme);
+                    LookAndFeel theme = customizer.createThemeFromDefaults((UIManager.LookAndFeelInfo) e.getItem(), true);
+                    previewPanel.setPreviewTheme(theme);
                 }catch (Exception ex){
+                    ex.printStackTrace();
                     previewPanel.reset();
                     JOptionPane.showMessageDialog(CustomizerPanel.this, "Could not load the specified theme.\n" + ex.getMessage(), "Burp Customizer", JOptionPane.ERROR_MESSAGE);
                 }
@@ -169,7 +176,7 @@ public class CustomizerPanel extends JPanel {
                     selectFileButton.setText(fileChooser.getSelectedFile().getName());
                     try {
                         LookAndFeel theme = customizer.createThemeFromFile(fileChooser.getSelectedFile());
-                        previewPanel.setTheme(theme);
+                        previewPanel.setPreviewTheme(theme);
                         selectedThemeFile = fileChooser.getSelectedFile();
                     } catch (IOException | UnsupportedLookAndFeelException ex) {
                         previewPanel.reset();
@@ -185,7 +192,7 @@ public class CustomizerPanel extends JPanel {
         JButton applyThemeButton = new JButton(new AbstractAction("Apply") {
             @Override
             public void actionPerformed(ActionEvent e) {
-                SwingUtilities.invokeLater(() -> {
+//                SwingUtilities.invokeLater(() -> {
                     if(lookAndFeelSelector.getSelectedItem() != null) {
                         customizer.setTheme((UIManager.LookAndFeelInfo) lookAndFeelSelector.getSelectedItem());
                     }else if(selectedThemeFile != null){
@@ -194,9 +201,10 @@ public class CustomizerPanel extends JPanel {
                         JOptionPane.showMessageDialog(CustomizerPanel.this, "No theme selected!", "Burp Customizer", JOptionPane.ERROR_MESSAGE);
                     }
                     viewOnGithubButton.setIcon(getGithubIcon());
-                });
+//                });
             }
         });
+//        applyThemeButton.setMinimumSize(applyThemeButton.getSize());
 
         if(customizer.getThemeSource() == BurpCustomizer.ThemeSource.BUILTIN && customizer.getSelectedBuiltIn() != null) {
             lookAndFeelSelector.setSelectedItem(customizer.getSelectedBuiltIn());
@@ -207,23 +215,29 @@ public class CustomizerPanel extends JPanel {
             selectedThemeFile = selectedFile;
         }
 
-        JPanel selectorPanel = PanelBuilder.build(new Component[][]{
+        PanelBuilder selectorPanelBuilder = new PanelBuilder();
+        selectorPanelBuilder.setComponentGrid(new Component[][]{
                 new Component[]{themeLabel, themeLabel},
                 new Component[]{defaultThemeLabel, lookAndFeelSelector},
                 new Component[]{fileThemeLabel, selectFileButton},
                 new Component[]{previewPanel, previewPanel},
                 new Component[]{applyThemeButton, applyThemeButton},
-        }, new int[][]{
+        });
+        int[][] selectorPanelWeights = new int[][]{
                 new int[]{0, 0},
+                new int[]{1, 1},
                 new int[]{1, 1},
                 new int[]{3, 3},
                 new int[]{1, 1},
-        }, Alignment.FILL, 1.0, 1.0);
+        };
+        selectorPanelBuilder.setGridWeightsX(selectorPanelWeights);
+        selectorPanelBuilder.setGridWeightsY(selectorPanelWeights);
+        selectorPanelBuilder.setAlignment(Alignment.FILL);
 
-        lookAndFeelSelector.setEnabled(customizer.isCompatible());
+        JPanel selectorPanel = selectorPanelBuilder.build();
 
-        JLabel incompatibleWarning = new JLabel("Burp Customizer requires Burp Suite 2020.12 or above.");
-        incompatibleWarning.setForeground(new Color(219, 53, 53));
+        JPanel fillerPanel = new JPanel();
+        fillerPanel.setMaximumSize(new Dimension(0,0));
 
         Component[][] componentGrid = new Component[][]{
                 new Component[]{headerLabel},
@@ -232,25 +246,42 @@ public class CustomizerPanel extends JPanel {
                 new Component[]{contactPanel},
                 new Component[]{aboutContent},
                 new Component[]{selectorPanel},
-                new Component[]{customizer.isCompatible() ? new JPanel() : incompatibleWarning},
-                new Component[]{new JPanel()}
+                new Component[]{fillerPanel},
+//                new Component[]{fillerPanel}
         };
 
-        int[][] weightGrid = new int[][]{
+        int[][] weightGridY = new int[][]{
                 new int[]{0},
                 new int[]{0},
                 new int[]{0},
                 new int[]{0},
                 new int[]{0},
                 new int[]{0},
-                new int[]{0},
-                new int[]{10},
+                new int[]{1},
         };
 
-        JPanel contentPanel = PanelBuilder.build(componentGrid, weightGrid, Alignment.FILL, 0.8, 1.0);
+        PanelBuilder contentPanelBuilder = new PanelBuilder();
+        contentPanelBuilder.setComponentGrid(componentGrid);
+        contentPanelBuilder.setGridWeightsX(weightGridY);
+        contentPanelBuilder.setGridWeightsY(weightGridY);
+        contentPanelBuilder.setScaleX(0.8);
+        contentPanelBuilder.setScaleY(1.0);
+        contentPanelBuilder.setAlignment(Alignment.FILL);
+
+        JPanel contentPanel = contentPanelBuilder.build();
         contentPanel.setBorder(new EmptyBorder(30, 30, 30, 30));
 
-        this.add(contentPanel, BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(contentPanel);
+        scrollPane.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                contentPanel.setPreferredSize(new Dimension(e.getComponent().getWidth(), contentPanel.getHeight()));
+            }
+        });
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+
+        this.add(scrollPane, BorderLayout.CENTER);
     }
 
     private ImageIcon getGithubIcon(){
