@@ -20,12 +20,12 @@ dependencies {
     implementation 'com.formdev:flatlaf-intellij-themes:2.4'
     compileOnly 'com.formdev:flatlaf:2.4' //Already shipped in burp
     compileOnly 'com.formdev:flatlaf-extras:2.4' //Already implemented in burp
-    implementation files('/home/corey/BurpSuitePro/burpsuite_pro.jar')
-//    testCompile files('/home/corey/BurpSuiteCommunity/burpsuite_community.jar')
+    compileOnly files('burpsuite_pro.jar')
 }
 
 jar {
     archiveBaseName = project.name
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 }
 
